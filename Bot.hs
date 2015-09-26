@@ -1,3 +1,4 @@
+import Control.Concurrent (threadDelay)
 import Control.Monad (forever)
 
 import Data.List (isPrefixOf)
@@ -22,14 +23,17 @@ nickservPass = "wormsmakegreatpasswords"
 
 -- main function
 main :: IO ()
-main = do h <- connectTo server (PortNumber (fromIntegral port))
-          hSetBuffering h NoBuffering
-          sendNick h botnick
-          sendUser h botnick
-          initConnection h
-          identify h
-          sequence_ $ map (write h) (map join chans)
-          listen h
+main = catchIOError main' handler
+    where main' = do h <- connectTo server (PortNumber (fromIntegral port))
+                     hSetBuffering h NoBuffering
+                     sendNick h botnick
+                     sendUser h botnick
+                     initConnection h
+                     identify h
+                     sequence_ $ map (write h) (map join chans)
+                     listen h
+          handler e | isEOFError e = threadDelay 3000000 >> main
+                    | otherwise = ioError e
 
 -- the listen "loop"
 listen :: Handle -> IO ()

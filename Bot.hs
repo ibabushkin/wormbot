@@ -1,0 +1,99 @@
+import Control.Monad (forever)
+
+import Data.List (isPrefixOf)
+import Data.Maybe (fromJust, isJust, fromMaybe)
+
+import Network
+
+import System.Directory
+import System.IO
+import System.IO.Error
+import System.Process
+
+import IRC
+
+-- toplevel constants (do we really need a config file?)
+server = "irc.evilzone.org"
+port = 6667
+chans = ["#test", "#bottest"]
+botnick = "wormbot"
+botAdmins = ["thewormkill"]
+nickservPass = "wormsmakegreatpasswords"
+
+-- main function
+main :: IO ()
+main = do h <- connectTo server (PortNumber (fromIntegral port))
+          hSetBuffering h NoBuffering
+          sendNick h botnick
+          sendUser h botnick
+          initConnection h
+          identify h
+          sequence_ $ map (write h) (map join chans)
+          listen h
+
+-- the listen "loop"
+listen :: Handle -> IO ()
+listen h = forever $ do s <- hGetLine h
+                        process h (parseIrc s)
+
+-- wait for a ping, then answer it (required by evilzone)
+initConnection :: Handle -> IO ()
+initConnection h = do s <- hGetLine h
+                      let msg = parseIrc s
+                      if command msg == "PING"
+                         then sendPong h (head $ args msg)
+                         else putStrLn s >> initConnection h
+
+-- identify with NickServ
+identify :: Handle -> IO ()
+identify h = write h msg
+    where msg = mkMessage
+             "PRIVMSG" ["NickServ", "IDENTIFY " ++ nickservPass]
+
+-- process a Message we get (helper)
+process :: Handle -> Message -> IO ()
+process h msg = do putStrLn $ ">> " ++ show msg
+                   processMessage h msg
+
+-- process a message
+processMessage :: Handle -> Message -> IO ()
+processMessage h msg
+    | command msg == "PING" = sendPong h (head $ args msg)
+    | command msg == "PRIVMSG" = processCommand h args'
+    | command msg == "KICK" = processKick h (args msg)
+    | otherwise = return ()
+    where args''@(channel:rest) = args msg
+          sourceNick = fst $ fromMaybe ("", "") (origin msg)
+          args' | channel == botnick = sourceNick:rest
+                | otherwise = args''
+
+-- process a comand we got via PRIVMSG
+processCommand :: Handle -> [String] -> IO ()
+processCommand h (channel:('!':call):[]) =
+    do result <- evaluateScript command args
+       if result /= []
+          then mapM_ (sendPrivmsg h channel) result
+          else return ()
+    where (command:args) = words call
+processCommand _ args = return ()
+
+-- someone got kicked... make sure that we return if it was us
+processKick :: Handle -> [String] -> IO ()
+processKick h (channel:nick:_:[])
+    | nick == botnick = sendJoin h channel
+    | otherwise = return ()
+
+-- run a script and return it's stdout
+evaluateScript :: String -> [String] -> IO [String]
+evaluateScript c input = do scripts <- getDirectoryContents "scripts/"
+                            let possible = filter (c' `isPrefixOf`) scripts
+                                process = (proc ("./scripts/" ++ command possible) input) { std_out = CreatePipe }
+                            (_, out, _, _) <- catchIOError (createProcess process) handler
+                            if isJust out
+                               then hGetContents (fromJust out) >>= return . lines
+                               else return []
+    where command (c:_) = c
+          command _ = ""
+          c' = filter (`notElem` "\\/.~") c
+          handler e | isPermissionError e = return (undefined, Nothing, undefined, undefined)
+                    | otherwise = ioError e

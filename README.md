@@ -24,3 +24,20 @@ will be seen.
 
 Note that you can just use a prefix of the script's name and
 the first matching script will be used.
+
+## Configuring and Installing
+Currently, this is done via editing the source of `Bot.hs`.
+
+### Installation via cabal-install
+Assuming you have GHC and cabal-install:
+```sh
+$ git clone https://github.com/ibabushkin/wormbot
+$ cd wormbot/
+$ cabal build
+$ cabal install
+```
+Now you have a binary called `wormbot` in your `~/.cabal/bin`.
+
+## Contributing
+Do it. Pull requests with scripts, as well as additions to the core,
+are welcome. Open issues if you feel it is needed.

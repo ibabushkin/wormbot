@@ -4,6 +4,6 @@ for fname in *; do
 	if [ -x "$fname" ] ; then
 		echo -n " [*]$fname" | sed -e 's/\..*$//'
 	else
-		echo -n " [ ]$fname"
+		echo -n " [ ]$fname" | sed -e 's/\..*$//'
 	fi
 done

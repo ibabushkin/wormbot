@@ -16,7 +16,7 @@ import IRC
 -- toplevel constants (do we really need a config file?)
 server = "irc.evilzone.org"
 port = 6667
-chans = ["#test", "#bottest"]
+chans = ["#test", "#bottest", "#Evilzone"]
 botnick = "wormbot"
 botAdmins = ["thewormkill"]
 nickservPass = "wormsmakegreatpasswords"

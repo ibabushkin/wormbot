@@ -92,9 +92,9 @@ processKick h (channel:nick:_:[])
 
 -- run a script and return it's stdout
 evaluateScript :: String -> [String] -> IO [String]
-evaluateScript c input = do scripts <- getDirectoryContents "scripts/"
+evaluateScript c input = do scripts <- getDirectoryContents "."
                             let possible = filter (c' `isPrefixOf`) scripts
-                                process = (proc ("./scripts/" ++ command possible) input) { std_out = CreatePipe }
+                                process = (proc ("./" ++ command possible) input) { std_out = CreatePipe }
                             (_, out, _, _) <- catchIOError (createProcess process) handler
                             if isJust out
                                then hGetContents (fromJust out) >>= return . lines

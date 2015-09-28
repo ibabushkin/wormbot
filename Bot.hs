@@ -24,7 +24,10 @@ nickservPass = "wormsmakegreatpasswords"
 -- main function
 main :: IO ()
 main = catchIOError main' handler
-    where main' = do h <- connectTo server (PortNumber (fromIntegral port))
+    where main' = do dir <- doesDirectoryExist "scripts/"
+                     createDirectoryIfMissing dir "scripts/"
+                     setCurrentDirectory "scripts/"
+                     h <- connectTo server (PortNumber (fromIntegral port))
                      hSetBuffering h NoBuffering
                      sendNick h botnick
                      sendUser h botnick

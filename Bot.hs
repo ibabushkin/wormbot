@@ -1,5 +1,5 @@
 import Control.Concurrent (threadDelay)
-import Control.Monad (forever)
+import Control.Monad (forever, filterM)
 
 import Data.List (isPrefixOf)
 import Data.Maybe (fromJust, isJust, fromMaybe)
@@ -92,7 +92,8 @@ processKick h (channel:nick:_:[])
 
 -- run a script and return it's stdout
 evaluateScript :: String -> [String] -> IO [String]
-evaluateScript c input = do scripts <- getDirectoryContents "."
+evaluateScript c input = do nodes <- getDirectoryContents "."
+                            scripts <- filterM doesFileExist nodes
                             let possible = filter (c' `isPrefixOf`) scripts
                                 process = (proc ("./" ++ command possible) input) { std_out = CreatePipe }
                             (_, out, _, _) <- catchIOError (createProcess process) handler

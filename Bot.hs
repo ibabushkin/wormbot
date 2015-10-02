@@ -86,7 +86,7 @@ processCommand h (channel:":c":[]) =
     where permStr p | executable p = "[*]"
                     | otherwise = "[ ]"
           pretty (m, p) = permStr p ++ " " ++ m
-processCommand h (channel:('!':call):[]) =
+processCommand h (channel:(':':call):[]) =
     do result <- evaluateScript command args
        if result /= []
           then mapM_ (sendPrivmsg h channel) result

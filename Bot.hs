@@ -89,7 +89,7 @@ processCommand h (channel:":c":[]) =
 processCommand h (channel:(':':call):[]) =
     do result <- evaluateScript command args
        if result /= []
-          then mapM_ (sendPrivmsg h channel) result
+          then mapM_ (sendPrivmsg h channel) $ map (filter (/='\r')) result
           else return ()
     where (command:args) = words call
 processCommand _ args = return ()

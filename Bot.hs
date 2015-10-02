@@ -1,7 +1,7 @@
 import Control.Concurrent (threadDelay)
 import Control.Monad (forever, filterM)
 
-import Data.List (isPrefixOf)
+import Data.List (isPrefixOf, intercalate)
 import Data.Maybe (fromJust, isJust, fromMaybe)
 
 import Network
@@ -76,6 +76,16 @@ processMessage h msg
 
 -- process a comand we got via PRIVMSG
 processCommand :: Handle -> [String] -> IO ()
+processCommand h (channel:":c":[]) =
+    do scripts <- getScripts
+       perms <- sequence $ map getPermissions scripts
+       let modules = map (fst . break (=='.')) scripts
+           modules' = map pretty $ zip modules perms
+           returnStr = intercalate ", " modules'
+       sendPrivmsg h channel returnStr
+    where permStr p | executable p = "[*]"
+                    | otherwise = "[ ]"
+          pretty (m, p) = permStr p ++ " " ++ m
 processCommand h (channel:('!':call):[]) =
     do result <- evaluateScript command args
        if result /= []
@@ -90,10 +100,13 @@ processKick h (channel:nick:_:[])
     | nick == botnick = sendJoin h channel
     | otherwise = return ()
 
+-- get all avalable scripts
+getScripts :: IO [FilePath]
+getScripts = getDirectoryContents "." >>= filterM doesFileExist
+
 -- run a script and return it's stdout
 evaluateScript :: String -> [String] -> IO [String]
-evaluateScript c input = do nodes <- getDirectoryContents "."
-                            scripts <- filterM doesFileExist nodes
+evaluateScript c input = do scripts <- getScripts
                             let possible = filter (c' `isPrefixOf`) scripts
                                 process = (proc ("./" ++ command possible) input) { std_out = CreatePipe }
                             (_, out, _, _) <- catchIOError (createProcess process) handler

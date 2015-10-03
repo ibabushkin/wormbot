@@ -106,13 +106,15 @@ getScripts = getDirectoryContents "." >>= filterM doesFileExist
 
 -- run a script and return it's stdout
 evaluateScript :: String -> [String] -> IO [String]
-evaluateScript c input = do scripts <- getScripts
-                            let possible = filter (c' `isPrefixOf`) scripts
-                                process = (proc ("./" ++ command possible) input) { std_out = CreatePipe }
-                            (_, out, _, _) <- catchIOError (createProcess process) handler
-                            if isJust out
-                               then hGetContents (fromJust out) >>= return . lines . filter (/='\r')
-                               else return []
+evaluateScript c input
+    | c' /= "" = do scripts <- getScripts
+                    let possible = filter (c' `isPrefixOf`) scripts
+                        process = (proc ("./" ++ command possible) input) { std_out = CreatePipe }
+                    (_, out, _, _) <- catchIOError (createProcess process) handler
+                    if isJust out
+                       then hGetContents (fromJust out) >>= return . lines . filter (/='\r')
+                       else return []
+    | otherwise = return []
     where command (c:_) = c
           command _ = ""
           c' = filter (`notElem` "\\/.~") c

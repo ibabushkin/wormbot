@@ -36,8 +36,8 @@ nickservPass :: String
 nickservPass = "wormsmakegreatpasswords"
 
 -- prefix for normal commands
-commandPrefix :: Char
-commandPrefix = ':'
+commandPrefixes :: [Char]
+commandPrefixes = ":<|.\\"
 
 -- prefix for commands that get user's nick as first arg
 userPrefix :: Char
@@ -46,7 +46,7 @@ userPrefix = '@'
 
 -- little helper
 prefixes :: [Char]
-prefixes = [commandPrefix, userPrefix]
+prefixes = userPrefix:commandPrefixes
 
 -- main function
 main :: IO ()

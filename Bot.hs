@@ -86,19 +86,21 @@ processCommand h (channel:":c":[]) =
     where permStr p | executable p = "[*]"
                     | otherwise = "[ ]"
           pretty (m, p) = permStr p ++ " " ++ m
-processCommand h (channel:(':':call):[]) =
-    do result <- evaluateScript command args
-       if result /= []
-          then mapM_ (sendPrivmsg h channel) result
-          else return ()
+processCommand h (channel:(':':call):[])
+    | call /= [] = do result <- evaluateScript command args
+                      if result /= []
+                         then mapM_ (sendPrivmsg h channel) result
+                         else return ()
+    | otherwise = return ()
     where (command:args) = words call
-processCommand _ args = return ()
+processCommand _ _ = return ()
 
 -- someone got kicked... make sure that we return if it was us
 processKick :: Handle -> [String] -> IO ()
 processKick h (channel:nick:_:[])
     | nick == botnick = sendJoin h channel
     | otherwise = return ()
+processKick _ _ = return ()
 
 -- get all avalable scripts
 getScripts :: IO [FilePath]

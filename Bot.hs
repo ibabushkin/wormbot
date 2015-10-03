@@ -13,13 +13,40 @@ import System.Process
 
 import IRC
 
--- toplevel constants (do we really need a config file?)
+-- {{{ toplevel constants (do we really need a config file?)
+
+-- the server we connect to
+server :: String
 server = "irc.evilzone.org"
+
+-- the port we use
+port :: Int
 port = 6667
+
+-- list of channels to join
+chans :: [String]
 chans = ["#test", "#bottest", "#Evilzone"]
+
+-- nick to use
+botnick :: String
 botnick = "wormbot"
-botAdmins = ["thewormkill"]
+
+-- nickserv password to use
+nickservPass :: String
 nickservPass = "wormsmakegreatpasswords"
+
+-- prefix for normal commands
+commandPrefix :: Char
+commandPrefix = ':'
+
+-- prefix for commands that get user's nick as first arg
+userPrefix :: Char
+userPrefix = '@'
+-- }}}
+
+-- little helper
+prefixes :: [Char]
+prefixes = [commandPrefix, userPrefix]
 
 -- main function
 main :: IO ()
@@ -66,7 +93,7 @@ process h msg = do putStrLn $ ">> " ++ show msg
 processMessage :: Handle -> Message -> IO ()
 processMessage h msg
     | command msg == "PING" = sendPong h (head $ args msg)
-    | command msg == "PRIVMSG" = processCommand h (fmap fst $ origin msg) args'
+    | command msg == "PRIVMSG" = processCommand h (fst <$> origin msg) args'
     | command msg == "KICK" = processKick h (args msg)
     | otherwise = return ()
     where args''@(channel:rest) = args msg
@@ -87,14 +114,14 @@ processCommand h _ [channel, ":c"] =
                     | otherwise = "[ ] "
           pretty m p = permStr p ++ m
 processCommand h (Just nickName) [channel, p:call]
-    | p `elem` ":@" && call' /= [] =
+    | p `elem` prefixes && call' /= [] =
         do result <- evaluateScript command args
            when (result /= []) $
                mapM_ (sendPrivmsg h channel) result
     | otherwise = return ()
     where call' = case words call of
                     [] -> []
-                    c@(com:ar) | p == '@' -> com:nickName:ar
+                    c@(com:ar) | p == userPrefix -> com:nickName:ar
                                | otherwise -> c
           command:args = call'
 processCommand _ _ _ = return ()

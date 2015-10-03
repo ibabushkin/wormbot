@@ -1,7 +1,5 @@
 module IRC where
 
-import Data.List (intercalate)
-
 import System.IO (Handle, hPutStr)
 
 type Command = String

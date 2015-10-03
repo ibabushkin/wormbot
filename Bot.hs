@@ -66,7 +66,7 @@ process h msg = do putStrLn $ ">> " ++ show msg
 processMessage :: Handle -> Message -> IO ()
 processMessage h msg
     | command msg == "PING" = sendPong h (head $ args msg)
-    | command msg == "PRIVMSG" = processCommand h args'
+    | command msg == "PRIVMSG" = processCommand h (fmap fst $ origin msg) args'
     | command msg == "KICK" = processKick h (args msg)
     | otherwise = return ()
     where args''@(channel:rest) = args msg
@@ -75,24 +75,29 @@ processMessage h msg
                 | otherwise = args''
 
 -- process a comand we got via PRIVMSG
-processCommand :: Handle -> [String] -> IO ()
-processCommand h ([channel, ":c"]) =
+processCommand :: Handle -> Maybe String -> [String] -> IO ()
+processCommand h _ [channel, ":c"] =
     do scripts <- getScripts
        perms <- mapM getPermissions scripts
        let modules = map (takeWhile (/='.')) scripts
            modules' = zipWith pretty modules perms
            returnStr = intercalate ", " modules'
        sendPrivmsg h channel returnStr
-    where permStr p | executable p = "[*]"
-                    | otherwise = "[ ]"
-          pretty m p = permStr p ++ " " ++ m
-processCommand h [channel, ':':call]
-    | call /= [] = do result <- evaluateScript command args
-                      when (result /= []) $
-                          mapM_ (sendPrivmsg h channel) result
+    where permStr p | executable p = "[*] "
+                    | otherwise = "[ ] "
+          pretty m p = permStr p ++ m
+processCommand h (Just nickName) [channel, p:call]
+    | p `elem` ":@" && call' /= [] =
+        do result <- evaluateScript command args
+           when (result /= []) $
+               mapM_ (sendPrivmsg h channel) result
     | otherwise = return ()
-    where (command:args) = words call
-processCommand _ _ = return ()
+    where call' = case words call of
+                    [] -> []
+                    c@(com:ar) | p == '@' -> com:nickName:ar
+                               | otherwise -> c
+          command:args = call'
+processCommand _ _ _ = return ()
 
 -- someone got kicked... make sure that we return if it was us
 processKick :: Handle -> [String] -> IO ()

@@ -89,7 +89,7 @@ processCommand h (channel:":c":[]) =
 processCommand h (channel:(':':call):[]) =
     do result <- evaluateScript command args
        if result /= []
-          then mapM_ (sendPrivmsg h channel) $ map (filter (/='\r')) result
+          then mapM_ (sendPrivmsg h channel) result
           else return ()
     where (command:args) = words call
 processCommand _ args = return ()
@@ -111,7 +111,7 @@ evaluateScript c input = do scripts <- getScripts
                                 process = (proc ("./" ++ command possible) input) { std_out = CreatePipe }
                             (_, out, _, _) <- catchIOError (createProcess process) handler
                             if isJust out
-                               then hGetContents (fromJust out) >>= return . lines
+                               then hGetContents (fromJust out) >>= return . lines . filter (/='\r')
                                else return []
     where command (c:_) = c
           command _ = ""

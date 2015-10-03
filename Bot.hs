@@ -1,5 +1,5 @@
 import Control.Concurrent (threadDelay)
-import Control.Monad (forever, filterM)
+import Control.Monad (forever, filterM, liftM, when)
 
 import Data.List (isPrefixOf, intercalate)
 import Data.Maybe (fromJust, isJust, fromMaybe)
@@ -33,7 +33,7 @@ main = catchIOError main' handler
                      sendUser h botnick
                      initConnection h
                      identify h
-                     sequence_ $ map (write h) (map join chans)
+                     mapM_ (write h . join) chans
                      listen h
           handler e | isEOFError e = threadDelay 3000000 >> main
                     | otherwise = ioError e
@@ -76,28 +76,27 @@ processMessage h msg
 
 -- process a comand we got via PRIVMSG
 processCommand :: Handle -> [String] -> IO ()
-processCommand h (channel:":c":[]) =
+processCommand h ([channel, ":c"]) =
     do scripts <- getScripts
-       perms <- sequence $ map getPermissions scripts
-       let modules = map (fst . break (=='.')) scripts
-           modules' = map pretty $ zip modules perms
+       perms <- mapM getPermissions scripts
+       let modules = map (takeWhile (/='.')) scripts
+           modules' = zipWith pretty modules perms
            returnStr = intercalate ", " modules'
        sendPrivmsg h channel returnStr
     where permStr p | executable p = "[*]"
                     | otherwise = "[ ]"
-          pretty (m, p) = permStr p ++ " " ++ m
-processCommand h (channel:(':':call):[])
+          pretty m p = permStr p ++ " " ++ m
+processCommand h [channel, ':':call]
     | call /= [] = do result <- evaluateScript command args
-                      if result /= []
-                         then mapM_ (sendPrivmsg h channel) result
-                         else return ()
+                      when (result /= []) $
+                          mapM_ (sendPrivmsg h channel) result
     | otherwise = return ()
     where (command:args) = words call
 processCommand _ _ = return ()
 
 -- someone got kicked... make sure that we return if it was us
 processKick :: Handle -> [String] -> IO ()
-processKick h (channel:nick:_:[])
+processKick h [channel, nick, _]
     | nick == botnick = sendJoin h channel
     | otherwise = return ()
 processKick _ _ = return ()
@@ -114,7 +113,7 @@ evaluateScript c input
                         process = (proc ("./" ++ command possible) input) { std_out = CreatePipe }
                     (_, out, _, _) <- catchIOError (createProcess process) handler
                     if isJust out
-                       then hGetContents (fromJust out) >>= return . lines . filter (/='\r')
+                       then liftM (lines . filter (/='\r')) (hGetContents (fromJust out))
                        else return []
     | otherwise = return []
     where command (c:_) = c

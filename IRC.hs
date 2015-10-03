@@ -66,7 +66,7 @@ sendPrivmsg h c s = write h (privmsg c s)
 -- format a Message to be send
 toIrc :: Message -> String
 toIrc (Message _ c args) = c ++ ' ':argString
-    where argString = intercalate " " (init args) ++ " :" ++ (last args) ++ "\r\n"
+    where argString = unwords (init args) ++ " :" ++ last args ++ "\r\n"
 
 -- a simple parser to clean up our mess of a bot
 parseIrc :: String -> Message

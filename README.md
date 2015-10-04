@@ -5,6 +5,8 @@ Let's dive straight in:
 * rejoin on kick
 * multiple channels
 * modules
+* multiple command prefixes + "user commands"
+* builtin command `:c` to list modules and their state (executable?)
 
 ## Module system
 Every module is just an executable script in a special directory.
@@ -13,17 +15,20 @@ is piped to irc.
 
 ### Example
 ```sh
-$ cat scripts/commands.sh
-#!/usr/bin/env sh
-
-ls scripts/
+$ cat scripts/test.py
+#!/bin/env python
+print("...")
 ```
-So if someone writes `!commands` into a channel where the bot
+So if someone writes `:test` into a channel where the bot
 is present, the script above will get executed and the output
 will be seen.
 
 Note that you can just use a prefix of the script's name and
 the first matching script will be used.
+
+Some modules, however, need to know who invoked them. This can be achieved
+by the `@` prefix. If a module gets invoked that way, it is called like this:
+`<script> <nickname> <other args>`
 
 ## Configuring and Installing
 Currently, this is done via editing the source of `Bot.hs`.

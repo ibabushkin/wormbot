@@ -105,14 +105,12 @@ processMessage h msg
 processCommand :: Handle -> Maybe String -> [String] -> IO ()
 processCommand h _ [channel, ":c"] =
     do scripts <- getScripts
-       perms <- mapM getPermissions scripts
-       let modules = map (takeWhile (/='.')) scripts
-           modules' = zipWith pretty modules perms
+       let modules' = map pretty scripts
            returnStr = intercalate ", " modules'
        sendPrivmsg h channel returnStr
-    where permStr p | executable p = "[*] "
-                    | otherwise = "[ ] "
-          pretty m p = permStr p ++ m
+    where permStr True = "[*] "
+          permStr False = "[ ] "
+          pretty (m, b) = permStr b ++ takeWhile (/='.') m
 processCommand h (Just nickName) [channel, p:call]
     | p `elem` prefixes && call' /= [] =
         do result <- evaluateScript command args
@@ -134,22 +132,25 @@ processKick h [channel, nick, _]
 processKick _ _ = return ()
 
 -- get all avalable scripts
-getScripts :: IO [FilePath]
-getScripts = getDirectoryContents "." >>= filterM doesFileExist
+getScripts :: IO [(FilePath, Bool)]
+getScripts = do files <- getDirectoryContents "." >>= filterM doesFileExist
+                perms <- mapM getPermissions files
+                return $ zip files (map executable perms)
 
 -- run a script and return it's stdout
 evaluateScript :: String -> [String] -> IO [String]
 evaluateScript c input
     | c' /= "" = do scripts <- getScripts
-                    let possible = filter (c' `isPrefixOf`) scripts
+                    let possible = map fst $ filter check scripts
                         process = (proc ("./" ++ command possible) input) { std_out = CreatePipe }
-                    (_, out, _, _) <- catchIOError (createProcess process) handler
-                    if isJust out
-                       then liftM (lines . filter (/='\r')) (hGetContents (fromJust out))
-                       else return []
+                    if command possible /= ""
+                       then do (_, out, _, _) <- createProcess process
+                               if isJust out
+                                  then liftM (lines . filter (/='\r')) (hGetContents (fromJust out))
+                                  else return []
+                       else return ["Unrecognized command, check :c"]
     | otherwise = return []
-    where command (c:_) = c
+    where check (s,p) =  c'`isPrefixOf`s && p
+          command (c:_) = c
           command _ = ""
           c' = filter (`notElem` "\\/.~") c
-          handler e | isPermissionError e = return (undefined, Nothing, undefined, undefined)
-                    | otherwise = ioError e

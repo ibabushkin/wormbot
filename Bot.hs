@@ -130,10 +130,6 @@ getScripts :: IO [(FilePath, Bool)]
 getScripts = do files <- getDirectoryContents "." >>= filterM doesFileExist
                 perms <- mapM getPermissions files
                 return $ zip files (map executable perms)
--- I also constructed the following gem:
--- getDirectoryContents "." >>= filterM doesFileExist
---     >>= (\files -> (return $ zip files) <*>
---         (map executable <$> (mapM getPermissions files)))
 
 -- run a script and return it's stdout
 evaluateScript :: String -> [String] -> IO [String]

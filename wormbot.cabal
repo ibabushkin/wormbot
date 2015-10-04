@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                wormbot
-version:             0.4.7.0
+version:             0.4.7.1
 synopsis:            A minimalistic IRC bot
 description:         An IRC bot that supports multiple channels, script execution, and everything else *you* can imagine.
 homepage:            https://www.github.com/ibabushkin/wormbot

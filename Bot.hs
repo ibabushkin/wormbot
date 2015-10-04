@@ -2,7 +2,7 @@ import Control.Concurrent (threadDelay)
 import Control.Monad (forever, filterM, liftM, when)
 
 import Data.List (isPrefixOf, intercalate)
-import Data.Maybe (fromJust, isJust, fromMaybe)
+import Data.Maybe (fromMaybe)
 
 import Network
 
@@ -36,7 +36,7 @@ nickservPass :: String
 nickservPass = "wormsmakegreatpasswords"
 
 -- prefix for normal commands
-commandPrefixes :: [Char]
+commandPrefixes :: String
 commandPrefixes = ":<|.\\"
 
 -- prefix for commands that get user's nick as first arg
@@ -45,7 +45,7 @@ userPrefix = '@'
 -- }}}
 
 -- little helper
-prefixes :: [Char]
+prefixes :: String
 prefixes = userPrefix:commandPrefixes
 
 -- main function
@@ -67,8 +67,7 @@ main = catchIOError main' handler
 
 -- the listen "loop"
 listen :: Handle -> IO ()
-listen h = forever $ do s <- hGetLine h
-                        process h (parseIrc s)
+listen h = forever $ parseIrc <$> hGetLine h >>= process h 
 
 -- wait for a ping, then answer it (required by evilzone)
 initConnection :: Handle -> IO ()
@@ -80,14 +79,11 @@ initConnection h = do s <- hGetLine h
 
 -- identify with NickServ
 identify :: Handle -> IO ()
-identify h = write h msg
-    where msg = mkMessage
-             "PRIVMSG" ["NickServ", "IDENTIFY " ++ nickservPass]
+identify h = sendPrivmsg h "NickServ" ("IDENTIFY " ++ nickservPass)
 
 -- process a Message we get (helper)
 process :: Handle -> Message -> IO ()
-process h msg = do putStrLn $ ">> " ++ show msg
-                   processMessage h msg
+process h msg = putStrLn (">> " ++ show msg) >> processMessage h msg
 
 -- process a message
 processMessage :: Handle -> Message -> IO ()
@@ -98,16 +94,14 @@ processMessage h msg
     | otherwise = return ()
     where args''@(channel:rest) = args msg
           sourceNick = fst $ fromMaybe ("", "") (origin msg)
+          -- not sure whether I should remove the fromMaybe
           args' | channel == botnick = sourceNick:rest
                 | otherwise = args''
 
 -- process a comand we got via PRIVMSG
 processCommand :: Handle -> Maybe String -> [String] -> IO ()
 processCommand h _ [channel, ":c"] =
-    do scripts <- getScripts
-       let modules' = map pretty scripts
-           returnStr = intercalate ", " modules'
-       sendPrivmsg h channel returnStr
+    (intercalate ", " . map pretty) <$> getScripts >>= sendPrivmsg h channel
     where permStr True = "[*] "
           permStr False = "[ ] "
           pretty (m, b) = permStr b ++ takeWhile (/='.') m
@@ -136,6 +130,10 @@ getScripts :: IO [(FilePath, Bool)]
 getScripts = do files <- getDirectoryContents "." >>= filterM doesFileExist
                 perms <- mapM getPermissions files
                 return $ zip files (map executable perms)
+-- I also constructed the following gem:
+-- getDirectoryContents "." >>= filterM doesFileExist
+--     >>= (\files -> (return $ zip files) <*>
+--         (map executable <$> (mapM getPermissions files)))
 
 -- run a script and return it's stdout
 evaluateScript :: String -> [String] -> IO [String]
@@ -144,11 +142,9 @@ evaluateScript c input
                     let possible = map fst $ filter check scripts
                         process = (proc ("./" ++ command possible) input) { std_out = CreatePipe }
                     if command possible /= ""
-                       then do (_, out, _, _) <- createProcess process
-                               if isJust out
-                                  then liftM (lines . filter (/='\r')) (hGetContents (fromJust out))
-                                  else return []
-                       else return ["Unrecognized command, check :c"]
+                       then do (_, Just out, _, _) <- createProcess process
+                               liftM (lines . filter (/='\r')) (hGetContents out)
+                       else return []
     | otherwise = return []
     where check (s,p) =  c'`isPrefixOf`s && p
           command (c:_) = c

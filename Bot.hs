@@ -126,7 +126,7 @@ evaluateScript nickName c input
     | c' /= "" = do scripts <- getScripts
                     let possible = map fst $ filter check scripts
                         process = (proc ("./" ++ command possible) input)
-                            { env = Just [("NICKNAME", nickName)] }
+                            { env = addNickToEnv (env process) }
                     if command possible /= ""
                        then liftM (lines . filter (/='\r')) (readCreateProcess process "")
                        else return []
@@ -135,3 +135,5 @@ evaluateScript nickName c input
           command (c:_) = c
           command _ = ""
           c' = filter (`notElem` "\\/.~") c
+          addNickToEnv Nothing = Just [("NICKNAME", nickName)]
+          addNickToEnv (Just env) = Just $ ("NICKNAME", nickName):env

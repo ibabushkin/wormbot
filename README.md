@@ -26,9 +26,9 @@ will be seen.
 Note that you can just use a prefix of the script's name and
 the first matching script will be used.
 
-Some modules, however, need to know who invoked them. This can be achieved
-by the `@` prefix. If a module gets invoked that way, it is called like this:
-`<script> <nickname> <other args>`
+Some modules, however, need to know who invoked them. This is possible
+by looking up the environment variable `NICKNAME` that is set in the
+script's environment.
 
 ## Configuring and Installing
 Currently, this is done via editing the source of `Bot.hs`.

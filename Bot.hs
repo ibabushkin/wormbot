@@ -38,15 +38,7 @@ nickservPass = "wormsmakegreatpasswords"
 -- prefix for normal commands
 commandPrefixes :: String
 commandPrefixes = ":<|.\\"
-
--- prefix for commands that get user's nick as first arg
-userPrefix :: Char
-userPrefix = '@'
 -- }}}
-
--- little helper
-prefixes :: String
-prefixes = userPrefix:commandPrefixes
 
 -- main function
 main :: IO ()
@@ -106,15 +98,12 @@ processCommand h _ [channel, ":c"] =
           permStr False = "[ ] "
           pretty (m, b) = permStr b ++ takeWhile (/='.') m
 processCommand h (Just nickName) [channel, p:call]
-    | p `elem` prefixes && call' /= [] =
-        do result <- evaluateScript command args
+    | p `elem` commandPrefixes && call' /= [] =
+        do result <- evaluateScript nickName command args
            when (result /= []) $
                mapM_ (sendPrivmsg h channel) result
     | otherwise = return ()
-    where call' = case words call of
-                    [] -> []
-                    c@(com:ar) | p == userPrefix -> com:nickName:ar
-                               | otherwise -> c
+    where call' = words call
           command:args = call'
 processCommand _ _ _ = return ()
 
@@ -131,15 +120,15 @@ getScripts = do files <- getDirectoryContents "." >>= filterM doesFileExist
                 perms <- mapM getPermissions files
                 return $ zip files (map executable perms)
 
--- run a script and return it's stdout
-evaluateScript :: String -> [String] -> IO [String]
-evaluateScript c input
+-- run a script and return it's stdout, the environment is set to the nick in NICKNAME
+evaluateScript :: String -> String -> [String] -> IO [String]
+evaluateScript nickName c input
     | c' /= "" = do scripts <- getScripts
                     let possible = map fst $ filter check scripts
-                        process = (proc ("./" ++ command possible) input) { std_out = CreatePipe }
+                        process = (proc ("./" ++ command possible) input)
+                            { env = Just [("NICKNAME", nickName)] }
                     if command possible /= ""
-                       then do (_, Just out, _, _) <- createProcess process
-                               liftM (lines . filter (/='\r')) (hGetContents out)
+                       then liftM (lines . filter (/='\r')) (readCreateProcess process "")
                        else return []
     | otherwise = return []
     where check (s,p) =  c'`isPrefixOf`s && p

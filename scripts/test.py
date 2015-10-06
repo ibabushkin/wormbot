@@ -3,3 +3,4 @@
 import os
 
 print("He's da man:", os.getenv("NICKNAME"))
+print(os.environ)

@@ -126,9 +126,9 @@ evaluateScript nickName c input
     | c' /= "" = do scripts <- getScripts
                     let possible = map fst $ filter check scripts
                         process = (proc ("./" ++ command possible) input)
-                            { env = addNickToEnv (env process) }
                     if command possible /= ""
-                       then liftM (lines . filter (/='\r')) (readCreateProcess process "")
+                       then liftM (lines . filter (/='\r'))
+                                (readCreateProcess process {env = addNickToEnv (env process)} "")
                        else return []
     | otherwise = return []
     where check (s,p) =  c'`isPrefixOf`s && p

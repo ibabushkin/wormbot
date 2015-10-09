@@ -127,8 +127,9 @@ evaluateScript nickName c input
                     let possible = map fst $ filter check scripts
                         process = (proc ("./" ++ command possible) input)
                     if command possible /= ""
-                       then liftM (lines . filter (/='\r'))
-                                (readCreateProcess process {env = addNickToEnv (env process)} "")
+                       then liftM (lines . filter (/='\r')) $
+                                catchIOError (readCreateProcess process {env = addNickToEnv (env process)} "")
+                                             handler
                        else return []
     | otherwise = return []
     where check (s,p) =  c'`isPrefixOf`s && p
@@ -137,3 +138,4 @@ evaluateScript nickName c input
           c' = filter (`notElem` "\\/.~") c
           addNickToEnv Nothing = Just [("NICKNAME", nickName)]
           addNickToEnv (Just env) = Just $ ("NICKNAME", nickName):env
+          handler _ = return "Script crashed, inform an admin!"

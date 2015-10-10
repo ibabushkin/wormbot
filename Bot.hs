@@ -25,7 +25,7 @@ port = 6667
 
 -- list of channels to join
 chans :: [String]
-chans = ["#test", "#bottest", "#Evilzone"]
+chans = ["#test", "#Evilzone"]
 
 -- nick to use
 botnick :: String
@@ -61,13 +61,12 @@ main = catchIOError main' handler
 listen :: Handle -> IO ()
 listen h = forever $ parseIrc <$> hGetLine h >>= process h 
 
--- wait for a ping, then answer it (required by evilzone)
+-- wait for a ping, then answer it (required by UnrealIRCd)
 initConnection :: Handle -> IO ()
-initConnection h = do s <- hGetLine h
-                      let msg = parseIrc s
+initConnection h = do msg <- parseIrc <$> hGetLine h
                       if command msg == "PING"
                          then sendPong h (head $ args msg)
-                         else putStrLn s >> initConnection h
+                         else putStrLn (show msg) >> initConnection h
 
 -- identify with NickServ
 identify :: Handle -> IO ()
@@ -125,17 +124,16 @@ evaluateScript :: String -> String -> [String] -> IO [String]
 evaluateScript nickName c input
     | c' /= "" = do scripts <- getScripts
                     let possible = map fst $ filter check scripts
-                        process = (proc ("./" ++ command possible) input)
+                        process = proc ("./" ++ command possible) input
                     if command possible /= ""
                        then liftM (lines . filter (/='\r')) $
                                 catchIOError (readCreateProcess process {env = addNickToEnv (env process)} "")
                                              handler
                        else return []
     | otherwise = return []
-    where check (s,p) =  c'`isPrefixOf`s && p
+    where check (s,p) =  c' `isPrefixOf` s && p
           command (c:_) = c
           command _ = ""
           c' = filter (`notElem` "\\/.~") c
-          addNickToEnv Nothing = Just [("NICKNAME", nickName)]
-          addNickToEnv (Just env) = Just $ ("NICKNAME", nickName):env
+          addNickToEnv = mappend (Just [("NICKNAME", nickName)])
           handler _ = return "Script crashed, inform an admin!"

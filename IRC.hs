@@ -27,7 +27,7 @@ nick n = mkMessage "NICK" [n]
 
 -- send a nick message
 sendNick :: Handle -> String -> IO ()
-sendNick h n = write h (nick n)
+sendNick h = write h . nick
 
 -- generate user message 
 user :: String -> Message
@@ -35,7 +35,7 @@ user n = mkMessage "USER" [n, "0", "*", "worm bot"]
 
 -- send user message
 sendUser :: Handle -> String -> IO ()
-sendUser h n = write h (user n)
+sendUser h = write h . user
 
 -- generate join message
 join :: String -> Message
@@ -43,7 +43,7 @@ join c = mkMessage "JOIN" [c]
 
 -- send join message
 sendJoin :: Handle -> String -> IO ()
-sendJoin h c = write h (join c)
+sendJoin h = write h . join
 
 -- generate pong message
 pong :: String -> Message
@@ -51,7 +51,7 @@ pong t = mkMessage "PONG" [t]
 
 -- send pong message
 sendPong :: Handle -> String -> IO ()
-sendPong h t = write h (pong t)
+sendPong h = write h . pong 
 
 -- generate private message
 privmsg :: String -> String -> Message

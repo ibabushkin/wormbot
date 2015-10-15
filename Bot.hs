@@ -66,7 +66,7 @@ initConnection :: Handle -> IO ()
 initConnection h = do msg <- parseIrc <$> hGetLine h
                       if command msg == "PING"
                          then sendPong h (head $ args msg)
-                         else putStrLn (show msg) >> initConnection h
+                         else print msg >> initConnection h
 
 -- identify with NickServ
 identify :: Handle -> IO ()

@@ -43,6 +43,20 @@ $ cabal install
 ```
 Now you have a binary called `wormbot` in your `~/.cabal/bin`.
 
+### Installation via stack
+Alternatively, you can just replace the cabal commands in the above
+example with their stack equivalents:
+```sh
+$ git clone https://github.com/ibabushkin/wormbot
+$ cd wormbot/
+$ stack build
+$ stack install
+```
+Now you have a binary called `wormbot` in your `~/.local/bin`.
+
 ## Contributing
 Do it. Pull requests with scripts, as well as additions to the core,
+
+## Scripts
+Scripts are maintained in their own separate [repo](https://github.com/ibabushkin/wormbot-scripts).
 are welcome. Open issues if you feel it is needed.

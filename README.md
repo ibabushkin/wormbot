@@ -56,7 +56,7 @@ Now you have a binary called `wormbot` in your `~/.local/bin`.
 
 ## Contributing
 Do it. Pull requests with scripts, as well as additions to the core,
+are welcome. Open issues if you feel it is needed.
 
 ## Scripts
 Scripts are maintained in their own separate [repo](https://github.com/ibabushkin/wormbot-scripts).
-are welcome. Open issues if you feel it is needed.

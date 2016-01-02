@@ -12,6 +12,7 @@ import System.IO.Error
 import System.Process
 
 import IRC
+import Hooks (msgHooks, Hook)
 
 -- {{{ toplevel constants (do we really need a config file?)
 
@@ -101,10 +102,15 @@ processCommand h (Just nickName) [channel, p:call]
         do result <- evaluateScript nickName command args
            when (result /= []) $
                mapM_ (sendPrivmsg h channel) result
-    | otherwise = return ()
+    | otherwise = mapM_ (>>= mapM (sendPrivmsg h channel)) $
+        runHooks msgHooks call'
     where call' = words call
           command:args = call'
 processCommand _ _ _ = return ()
+
+-- run a specified list of hooks
+runHooks :: [Hook] -> [String] -> [IO [String]]
+runHooks hs wordList = map (\x -> x wordList) hs
 
 -- someone got kicked... make sure that we return if it was us
 processKick :: Handle -> [String] -> IO ()
@@ -127,8 +133,9 @@ evaluateScript nickName c input
                         process = proc ("./" ++ command possible) input
                     if command possible /= ""
                        then liftM (lines . filter (/='\r')) $
-                                catchIOError (readCreateProcess process {env = addNickToEnv (env process)} "")
-                                             handler
+                           catchIOError (readCreateProcess
+                                        process {env = addNickToEnv (env process)}
+                                        "") handler
                        else return []
     | otherwise = return []
     where check (s,p) =  c' `isPrefixOf` s && p

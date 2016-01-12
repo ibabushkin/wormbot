@@ -49,7 +49,7 @@ main = catchIOError main' handler
                      setCurrentDirectory "scripts/"
                      h <- connectTo server (PortNumber (fromIntegral port))
                      hSetBuffering h NoBuffering
-                     sendNick h botnick
+                     sendNick h botnick -- TODO: BAH
                      sendUser h botnick
                      initConnection h
                      identify h
@@ -99,7 +99,7 @@ processCommand h _ [channel, ":c"] =
           pretty (m, b) = permStr b ++ takeWhile (/='.') m
 processCommand h (Just nickName) [channel, p:call]
     | p `elem` commandPrefixes && call' /= [] =
-        do result <- evaluateScript nickName command args
+        do result <- evaluateScript nickName [p] command args
            when (result /= []) $
                mapM_ (sendPrivmsg h channel) result
     | otherwise = mapM_ (>>= mapM (sendPrivmsg h channel)) $
@@ -126,15 +126,15 @@ getScripts = do files <- getDirectoryContents "." >>= filterM doesFileExist
                 return $ zip files (map executable perms)
 
 -- run a script and return it's stdout, the environment is set to the nick in NICKNAME
-evaluateScript :: String -> String -> [String] -> IO [String]
-evaluateScript nickName c input
+evaluateScript :: String -> String -> String -> [String] -> IO [String]
+evaluateScript nickName prefix c input
     | c' /= "" = do scripts <- getScripts
                     let possible = map fst $ filter check scripts
                         process = proc ("./" ++ command possible) input
                     if command possible /= ""
                        then liftM (lines . filter (/='\r')) $
                            catchIOError (readCreateProcess
-                                        process {env = addNickToEnv (env process)}
+                                        process {env = addStuffToEnv (env process)}
                                         "") handler
                        else return []
     | otherwise = return []
@@ -142,5 +142,5 @@ evaluateScript nickName c input
           command (c:_) = c
           command _ = ""
           c' = filter (`notElem` "\\/.~") c
-          addNickToEnv = mappend (Just [("NICKNAME", nickName)])
+          addStuffToEnv = mappend (Just [("NICKNAME", nickName), ("PREFIX", prefix)])
           handler _ = return "Script crashed, inform an admin!"

@@ -2,5 +2,5 @@
 *.swp
 Bot2.hs
 dist/*
-scripts/.ropeproject/*
+scripts
 .stack-work/*

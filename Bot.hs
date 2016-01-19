@@ -29,7 +29,7 @@ chans :: [String]
 chans = ["#test", "#Evilzone"]
 
 -- nick to use
-botnick :: String
+botnick :: NickName
 botnick = "wormbot"
 
 -- nickserv password to use
@@ -38,7 +38,7 @@ nickservPass = "wormsmakegreatpasswords"
 
 -- prefix for normal commands
 commandPrefixes :: String
-commandPrefixes = ":<|.\\"
+commandPrefixes = ":<"
 -- }}}
 
 -- main function
@@ -64,10 +64,11 @@ listen h = forever $ parseIrc <$> hGetLine h >>= process h
 
 -- wait for a ping, then answer it (required by UnrealIRCd)
 initConnection :: Handle -> IO ()
-initConnection h = do msg <- parseIrc <$> hGetLine h
-                      if command msg == "PING"
-                         then sendPong h (head $ args msg)
-                         else print msg >> initConnection h
+initConnection h = do
+    msg <- parseIrc <$> hGetLine h
+    if command msg == "PING"
+       then sendPong h (head $ args msg)
+       else print msg >> initConnection h
 
 -- identify with NickServ
 identify :: Handle -> IO ()
@@ -91,7 +92,7 @@ processMessage h msg
                 | otherwise = args''
 
 -- process a comand we got via PRIVMSG
-processCommand :: Handle -> Maybe String -> [String] -> IO ()
+processCommand :: Handle -> Maybe NickName -> [String] -> IO ()
 processCommand h _ [channel, ":c"] =
     (intercalate ", " . map pretty) <$> getScripts >>= sendPrivmsg h channel
     where permStr True = "[*] "
@@ -100,8 +101,7 @@ processCommand h _ [channel, ":c"] =
 processCommand h (Just nickName) [channel, p:call]
     | p `elem` commandPrefixes && call' /= [] =
         do result <- evaluateScript nickName [p] command args
-           when (result /= []) $
-               mapM_ (sendPrivmsg h channel) result
+           when (result /= []) $ mapM_ (sendPrivmsg h channel) result
     | otherwise = mapM_ (>>= mapM (sendPrivmsg h channel)) $
         runHooks msgHooks call'
     where call' = words call
@@ -121,25 +121,27 @@ processKick _ _ = return ()
 
 -- get all avalable scripts
 getScripts :: IO [(FilePath, Bool)]
-getScripts = do files <- getDirectoryContents "." >>= filterM doesFileExist
-                perms <- mapM getPermissions files
-                return $ zip files (map executable perms)
+getScripts = do
+    files <- getDirectoryContents "." >>= filterM doesFileExist
+    perms <- mapM getPermissions files
+    return $ zip files (map executable perms)
 
 -- run a script and return it's stdout, the environment is set to the nick in NICKNAME
-evaluateScript :: String -> String -> String -> [String] -> IO [String]
+evaluateScript :: NickName -> String -> String -> [String] -> IO [String]
 evaluateScript nickName prefix c input
-    | c' /= "" = do scripts <- getScripts
-                    let possible = map fst $ filter check scripts
-                        process = proc ("./" ++ command possible) input
-                    if command possible /= ""
-                       then liftM (lines . filter (/='\r')) $
-                           catchIOError (readCreateProcess
-                                        process {env = addStuffToEnv (env process)}
-                                        "") handler
-                       else return []
+    | c' /= "" = do
+        scripts <- getScripts
+        let possible = map fst $ filter check scripts
+            process = proc ("./" ++ command possible) input
+        putStrLn $ "Possible scripts: " ++ show possible
+        if command possible /= ""
+           then liftM (lines . filter (/='\r')) $
+               catchIOError (readCreateProcess
+                   process { env = addStuffToEnv (env process) } "") handler
+           else return []
     | otherwise = return []
     where check (s,p) =  c' `isPrefixOf` s && p
-          command (c:_) = c
+          command [c] = c
           command _ = ""
           c' = filter (`notElem` "\\/.~") c
           addStuffToEnv = mappend (Just [("NICKNAME", nickName), ("PREFIX", prefix)])

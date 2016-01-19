@@ -4,7 +4,8 @@ import System.IO (Handle, hPutStr)
 
 type Command = String
 
-type Origin = (String, String)
+type NickName = String
+type Origin = (NickName, String)
 
 data Message = Message { origin :: Maybe Origin
                        , command :: Command

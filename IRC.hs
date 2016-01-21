@@ -1,30 +1,40 @@
-{-# GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module IRC where
 
-import System.IO (Handle, hPutStr)
+import Control.Applicative
 
-newtype NickName = NickName { getNickName :: String }
+import Data.Text
+import Data.Attoparsec.Text as P
+
+-- = newtypes for concern separation
+newtype NickName = NickName { getNickName :: Text }
     deriving (Show, Eq)
-newtype UserName = UserName { getUserName :: String }
+newtype UserName = UserName { getUserName :: Text }
     deriving (Show, Eq)
-newtype HostName = HostName { getHostName :: String }
+newtype RealName = RealName { getRealName :: Text }
     deriving (Show, Eq)
-newtype Token = Token { getToken :: String }
+newtype HostName = HostName { getHostName :: Text }
     deriving (Show, Eq)
-newtype Channel = Channel { getChannel :: String }
+newtype Token = Token { getToken :: Text }
+    deriving (Show, Eq)
+newtype Channel = Channel { getChannel :: Text }
     deriving (Show, Eq)
 
+-- | an IRC command of relevance to the bot
 data Command
     = Ping Token
     | Pong Token
     | Nick NickName
-    | User UserName
+    | User UserName RealName
     | Join Channel
-    | PrivMsg Channel String
+    | Kick Channel NickName Text
+    | PrivMsg Channel Text
     deriving (Show, Eq)
 
+-- | an IRC message's origin
 type Origin = (NickName, HostName)
 
+-- | an IRC message
 data Message = Message (Maybe Origin) Command deriving (Show, Eq)
 
 -- | generate a response to a ping from the server
@@ -32,37 +42,42 @@ pingToPong :: Command -> Maybe Command
 pingToPong (Ping t) = Just $ Pong t
 pingToPong _ = Nothing
 
-{- generate user message 
-user :: String -> Message
-user n = mkMessage "USER" [n, "0", "*", "worm bot"]
+-- | generate a representation of an IRC command 
+toIrc :: Command -> Text
+toIrc (Ping token) = "PING :" `append` getToken token
+toIrc (Pong token) = "PONG :" `append` getToken token
+toIrc (Nick nick) = "NICK :"
+toIrc (User uName rName) = "USER " `append`
+    getUserName uName `append` " 0 *:" `append` getRealName rName
+toIrc (Join channel) = "JOIN :" `append` getChannel channel
+toIrc (Kick channel nick text) = "KICK :" `append` getChannel channel
+    `append` " " `append` getNickName nick `append` ":" `append` text
+toIrc (PrivMsg channel text) =
+    "PRIVMSG " `append` getChannel channel `append` text
 
--- format a Message to be send
-toIrc :: Command -> String
-toIrc (Message _ c args) = c ++ ' ':argString
-    where argString = unwords (init args) ++ " :" ++ last args ++ "\r\n"
+-- | parse a message
+message :: Parser Message
+message = Message <$> origin <*> command
 
--- a simple parser to clean up our mess of a bot
-parseIrc :: String -> Message
-parseIrc (':':s) =
-    Message (parseOrigin origin) command args'
-    where s' | last s == '\r' = init s
-             | otherwise = s
-          (tokens, lastArg) = case break (==':') s' of
-                                (t, ':':l) -> (t, Just l)
-                                (t, "") -> (t, Nothing)
-          (origin:command:args) = words tokens
-          args' = case lastArg of
-                    Just x -> args ++ [x]
-                    Nothing -> args
-parseIrc s = Message Nothing command args'
-    where (tokens, ':':lastArg) = break (==':') s
-          (command:args) = words tokens
-          args' = args ++ [lastArg]
+-- parse an message's command
+command :: Parser Command
+command = choice
+    [ Ping <$> (string "PING " *> (Token <$> lastArg))
+    , Nick <$> (string "NICK " *> (NickName <$> lastArg))
+    , Join <$> (string "JOIN " *> (Channel <$> lastArg))
+    , Kick <$> (string "KICK " *> (Channel <$> arg)) <*>
+        (NickName <$> nTLArg) <*> lastArg
+    , PrivMsg <$> (string "PRIVMSG " *> (Channel <$> nTLArg)) <*> lastArg
+    ]
+    where noEol = P.takeWhile $ (&&) <$> (/='\r') <*> (/='\n')
+          noSpace = P.takeWhile $ (&&) <$> (/=' ') <*> (/='\t')
+          noColon = P.takeWhile $ (/= ':') 
+          lastArg = noEol <* string "\r\n"
+          nTLArg = noColon <* char ':'
+          arg = noSpace <* (char ' ' <|> char '\t')
 
--- parse the origin of a message
-parseOrigin :: String -> Maybe Origin
-parseOrigin s
-    | '!' `elem` s = Just (NickName nick, HostName host)
-    | otherwise = Nothing
-    where (nick, host) = break (=='!') s
-          -}
+-- | parse a message's origin
+origin :: Parser (Maybe Origin)
+origin = Just <$> ( (,) <$>
+    (char ':' *> (NickName <$> P.takeWhile (/= '!') <* char '!')) <*>
+    (HostName <$> P.takeWhile (notInClass " ") <* char ' ')) <|> return Nothing

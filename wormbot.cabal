@@ -20,6 +20,7 @@ executable wormbot
   main-is:             Bot.hs
   build-depends:       attoparsec >= 0.13,
                        base >=4.8,
+                       bytestring,
                        directory >=1.2,
                        network >=2.6,
                        process >=1.2,

@@ -17,6 +17,8 @@ newtype RealName = RealName { getRealName :: Text }
     deriving (Show, Eq)
 newtype HostName = HostName { getHostName :: Text }
     deriving (Show, Eq)
+newtype ServerName = ServerName { getServerName :: Text }
+    deriving (Show, Eq)
 newtype Token = Token { getToken :: Text }
     deriving (Show, Eq)
 newtype Channel = Channel { getChannel :: Text }
@@ -24,20 +26,23 @@ newtype Channel = Channel { getChannel :: Text }
 
 -- | an IRC command of relevance to the bot
 data Command
-    = Ping Token
-    | Pong Token
-    | Nick NickName
-    | User UserName RealName
-    | Join Channel
+    = Join Channel
     | Kick Channel NickName Text
+    | Nick NickName
+    | Notice Text Text
+    | Ping Token
     | PrivMsg Channel Text
+    | Pong Token
+    | User UserName RealName
     deriving (Show, Eq)
 
 -- | an IRC message's origin
-type Origin = (NickName, HostName)
+data Prefix = UserPrefix NickName HostName
+            | ServerPrefix ServerName
+            deriving (Show, Eq)
 
 -- | an IRC message
-data Message = Message (Maybe Origin) Command deriving (Show, Eq)
+data Message = Message (Maybe Prefix) Command deriving (Show, Eq)
 
 -- | generate a representation of an IRC command 
 toIrc :: Command -> Text
@@ -51,24 +56,26 @@ toIrc (Kick channel nick text) = "KICK :" `append` getChannel channel
     `append` " " `append` getNickName nick `append` ":" `append` text
 toIrc (PrivMsg channel text) =
     "PRIVMSG " `append` getChannel channel `append` " :" `append` text
+toIrc _ = Data.Text.empty
 
 parseIrc :: Text -> Maybe Message
 parseIrc = maybeResult . parse message
 
 -- | parse a message
 message :: Parser Message
-message = Message <$> origin <*> command
+message = Message <$> prefix <*> command
 
 -- | parse an message's command
 -- note that this component recieves lines stripped of the "\n",
 -- thus suffixed by "\r" only.
 command :: Parser Command
 command = choice
-    [ Ping <$> (string "PING" *> (Token <$> lastArg))
-    , Nick <$> (string "NICK" *> (NickName <$> lastArg))
-    , Join <$> (string "JOIN" *> (Channel <$> lastArg))
+    [ Join <$> (string "JOIN" *> (Channel <$> lastArg))
     , Kick <$> (string "KICK" *> (Channel <$> arg)) <*>
         (NickName <$> arg) <*> lastArg
+    , Nick <$> (string "NICK" *> (NickName <$> lastArg))
+    , Notice <$> (string "NOTICE" *> arg) <*> lastArg
+    , Ping <$> (string "PING" *> (Token <$> lastArg))
     , PrivMsg <$> (string "PRIVMSG" *> (Channel <$> arg)) <*> lastArg
     ]
     where noEol = P.takeWhile (/='\r')
@@ -77,8 +84,18 @@ command = choice
           lastArg = string " :" *> noEol <* char '\r'
           arg = char ' ' *> noSpace
 
--- | parse a message's origin
-origin :: Parser (Maybe Origin)
-origin = Just <$> ( (,) <$>
-    (char ':' *> (NickName <$> P.takeWhile (/= '!') <* char '!')) <*>
-    (HostName <$> P.takeWhile (/= ' ') <* char ' ')) <|> return Nothing
+-- | parse a message prefix
+prefix :: Parser (Maybe Prefix)
+prefix = Just <$> (userPrefix <|> serverPrefix) <|> return Nothing
+
+-- | parse a user's prefix
+userPrefix :: Parser Prefix
+userPrefix = UserPrefix <$>
+    (char ':' *> (NickName <$> P.takeWhile tokenBoundary <* char '!')) <*>
+    (HostName <$> P.takeWhile (/= ' ') <* char ' ')
+    where tokenBoundary = (&&) <$> (/= '!') <*> (/= ' ')
+
+-- | parse a server's prefix
+serverPrefix :: Parser Prefix
+serverPrefix = ServerPrefix <$>
+    (char ':' *> (ServerName <$> P.takeWhile (/= ' ')) <* char ' ')

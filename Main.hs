@@ -4,7 +4,9 @@ module Main where
 import Control.Concurrent (threadDelay)
 import Control.Monad (forever)
 
+import qualified Data.ByteString as B
 import Data.Text hiding (foldr1)
+import Data.Text.Encoding
 import Data.Text.IO as TIO
 
 import Network
@@ -16,10 +18,12 @@ import Defaults
 import Hooks
 import IRC
 
+-- | a proxy type to represent intermediate results of a hook result
 data CommandProxy
     = Proxy Command
     | IgnoreProxy
 
+-- | pure mapping from input to intermediate structures
 proxify :: Message -> CommandProxy
 proxify (Message src cmd) =
     case cmd of
@@ -45,22 +49,22 @@ main = (flip catchIOError) disconnectHandler $ do
     mapM_ (send h . Join . Channel) chans
     forever $ process h
 
+-- | send a command through a handle
 send :: Handle -> Command -> IO ()
 send h c = do
     let r = append (toIrc c) "\r\n"
     TIO.hPutStr h r
     Prelude.putStrLn $ "Sent: " ++ show r
 
+-- | process an incoming line from the server:
+-- Essentially, this is a hook engine
 process :: Handle -> IO ()
 process h = do
-    line <- TIO.hGetLine h
-    Prelude.putStrLn $ "Recieved: " ++ show line
+    line <- decodeUtf8 <$> B.hGetLine h
+    TIO.putStrLn $ "Recieved: " `append` line
     case parseIrc line of
-      Just msg@(Message _ cmd) -> do
+      Just msg -> do
           res <- interpret (proxify msg)
-          case cmd of
-            PrivMsg _ t -> TIO.putStrLn t
-            _ -> return ()
           case res of
             Just r -> send h r
             Nothing -> return ()

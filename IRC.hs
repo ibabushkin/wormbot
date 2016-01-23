@@ -1,10 +1,12 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, OverloadedStrings #-}
 module IRC where
 
 import Control.Applicative
 
 import Data.Text
 import Data.Attoparsec.Text as P
+
+import System.IO (Handle)
 
 -- = newtypes for concern separation
 newtype NickName = NickName { getNickName :: Text }
@@ -37,47 +39,46 @@ type Origin = (NickName, HostName)
 -- | an IRC message
 data Message = Message (Maybe Origin) Command deriving (Show, Eq)
 
--- | generate a response to a ping from the server
-pingToPong :: Command -> Maybe Command
-pingToPong (Ping t) = Just $ Pong t
-pingToPong _ = Nothing
-
 -- | generate a representation of an IRC command 
 toIrc :: Command -> Text
 toIrc (Ping token) = "PING :" `append` getToken token
 toIrc (Pong token) = "PONG :" `append` getToken token
-toIrc (Nick nick) = "NICK :"
+toIrc (Nick nick) = "NICK :" `append` getNickName nick 
 toIrc (User uName rName) = "USER " `append`
     getUserName uName `append` " 0 *:" `append` getRealName rName
 toIrc (Join channel) = "JOIN :" `append` getChannel channel
 toIrc (Kick channel nick text) = "KICK :" `append` getChannel channel
     `append` " " `append` getNickName nick `append` ":" `append` text
 toIrc (PrivMsg channel text) =
-    "PRIVMSG " `append` getChannel channel `append` text
+    "PRIVMSG " `append` getChannel channel `append` " :" `append` text
+
+parseIrc :: Text -> Maybe Message
+parseIrc = maybeResult . parse message
 
 -- | parse a message
 message :: Parser Message
 message = Message <$> origin <*> command
 
--- parse an message's command
+-- | parse an message's command
+-- note that this component recieves lines stripped of the "\n",
+-- thus suffixed by "\r" only.
 command :: Parser Command
 command = choice
-    [ Ping <$> (string "PING " *> (Token <$> lastArg))
-    , Nick <$> (string "NICK " *> (NickName <$> lastArg))
-    , Join <$> (string "JOIN " *> (Channel <$> lastArg))
-    , Kick <$> (string "KICK " *> (Channel <$> arg)) <*>
-        (NickName <$> nTLArg) <*> lastArg
-    , PrivMsg <$> (string "PRIVMSG " *> (Channel <$> nTLArg)) <*> lastArg
+    [ Ping <$> (string "PING" *> (Token <$> lastArg))
+    , Nick <$> (string "NICK" *> (NickName <$> lastArg))
+    , Join <$> (string "JOIN" *> (Channel <$> lastArg))
+    , Kick <$> (string "KICK" *> (Channel <$> arg)) <*>
+        (NickName <$> arg) <*> lastArg
+    , PrivMsg <$> (string "PRIVMSG" *> (Channel <$> arg)) <*> lastArg
     ]
-    where noEol = P.takeWhile $ (&&) <$> (/='\r') <*> (/='\n')
+    where noEol = P.takeWhile (/='\r')
           noSpace = P.takeWhile $ (&&) <$> (/=' ') <*> (/='\t')
           noColon = P.takeWhile $ (/= ':') 
-          lastArg = noEol <* string "\r\n"
-          nTLArg = noColon <* char ':'
-          arg = noSpace <* (char ' ' <|> char '\t')
+          lastArg = string " :" *> noEol <* char '\r'
+          arg = char ' ' *> noSpace
 
 -- | parse a message's origin
 origin :: Parser (Maybe Origin)
 origin = Just <$> ( (,) <$>
     (char ':' *> (NickName <$> P.takeWhile (/= '!') <* char '!')) <*>
-    (HostName <$> P.takeWhile (notInClass " ") <* char ' ')) <|> return Nothing
+    (HostName <$> P.takeWhile (/= ' ') <* char ' ')) <|> return Nothing

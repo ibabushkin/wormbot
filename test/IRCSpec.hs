@@ -27,5 +27,5 @@ toIrcSpec = describe "toIrc" $ do
         forAll sendableCommands $
         (/= 1) . Prelude.length . splitOn " :" . toIrc
     it "is well-behaved towards our parser" $ property $
-        forAll sendableCommands $
+        forAll bijectiveCommands $
         (==) <$> parseOnly command . T.init . toIrc <*> Right

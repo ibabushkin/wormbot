@@ -10,36 +10,48 @@ import IRC
 
 illegal :: String
 illegal = " \r\n\0"
+
+makeLegal :: Text -> Text
+makeLegal = T.filter (`notElem` illegal)
+
+letters :: String
+letters = ['a'..'z'] ++ ['A'..'Z']
+
+numbers :: String
+numbers = "1234567890"
+
+special :: String
+special = "-[]{}\\`^_"
+
 -- = Generators for our datatypes
 
 instance Arbitrary NickName where
-    arbitrary = (NickName . pack . Prelude.filter (`notElem` illegal)) <$>
-        suchThat arbitrary (not . Prelude.null)
+    arbitrary = (NickName . pack) <$>
+        (listOf1 . elements $ numbers ++ special ++ letters)
 
 instance Arbitrary UserName where
-    arbitrary = (UserName . pack . Prelude.filter (`notElem` illegal)) <$>
-        suchThat arbitrary (not . Prelude.null)
-
+    arbitrary = (UserName . pack) <$>
+        (listOf1 . elements $ numbers ++ special ++ letters)
 
 instance Arbitrary RealName where
     arbitrary = (RealName . pack) <$>
-        suchThat arbitrary (not . Prelude.null)
+        (listOf1 . elements $ numbers ++ special ++ letters)
 
 instance Arbitrary HostName where
-    arbitrary = (HostName . pack . Prelude.filter (`notElem` illegal)) <$>
-        suchThat arbitrary (not . Prelude.null)
+    arbitrary = (HostName . pack) <$>
+        (listOf1 . elements $ numbers ++ special ++ letters)
 
 instance Arbitrary ServerName where
-    arbitrary = (ServerName . pack . Prelude.filter (`notElem` illegal)) <$>
-        suchThat arbitrary (not . Prelude.null)
+    arbitrary = (ServerName . pack) <$>
+        (listOf1 . elements $ numbers ++ letters)
 
 instance Arbitrary Token where
-    arbitrary = (Token . pack . Prelude.filter (`notElem` illegal)) <$>
-        suchThat arbitrary (not . Prelude.null)
+    arbitrary = (Token . pack) <$>
+        (listOf1 . elements $ numbers ++ letters)
 
 instance Arbitrary Channel where
-    arbitrary = (Channel . pack . Prelude.filter (`notElem` illegal)) <$>
-        suchThat arbitrary (not . Prelude.null)
+    arbitrary = (Channel . pack) <$>
+        ((:) <$> return '#' <*> (listOf1 . elements $ numbers ++ letters))
 
 instance Arbitrary Command where
     arbitrary = oneof
@@ -50,12 +62,17 @@ instance Arbitrary Command where
 
 sendableCommands :: Gen Command
 sendableCommands = oneof
-    [ Join <$> arbitrary
-    , Kick <$> arbitrary <*> arbitrary <*> arbitrary
-    , Nick <$> arbitrary
-    , PrivMsg <$> arbitrary <*> arbitrary
+    [ bijectiveCommands
     , Pong <$> arbitrary
     , User <$> arbitrary <*> arbitrary
+    ]
+
+bijectiveCommands :: Gen Command
+bijectiveCommands = oneof
+    [ Join <$> arbitrary
+    , Kick <$> arbitrary <*> arbitrary <*> (makeLegal <$> arbitrary)
+    , Nick <$> arbitrary
+    , PrivMsg <$> arbitrary <*> (makeLegal <$> arbitrary)
     ]
 
 instance Arbitrary Prefix where

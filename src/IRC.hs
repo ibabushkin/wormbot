@@ -81,7 +81,7 @@ command = choice
     , PrivMsg <$> (string "PRIVMSG" *> (Channel <$> arg)) <*> lastArg
     ]
     where noEol = P.takeWhile (/='\r')
-          noSpace = P.takeWhile $ (&&) <$> (/=' ') <*> (/='\t')
+          noSpace = P.takeWhile $ (/=' ')
           noColon = P.takeWhile $ (/= ':') 
           lastArg = string " :" *> noEol <* char '\r'
           arg = char ' ' *> noSpace

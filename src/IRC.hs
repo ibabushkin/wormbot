@@ -45,6 +45,9 @@ data Prefix = UserPrefix NickName HostName
 data Message = Message (Maybe Prefix) Command deriving (Show, Eq)
 
 -- | generate a representation of an IRC command 
+toIrc :: Command -> Text
+toIrc = (`append` "\r\n") . toIrc'
+
 toIrc' :: Command -> Text
 toIrc' (Pong token) = "PONG :" `append` getToken token
 toIrc' (Nick nick) = "NICK :" `append` getNickName nick 
@@ -57,9 +60,7 @@ toIrc' (PrivMsg channel text) =
     "PRIVMSG " `append` getChannel channel `append` " :" `append` text
 toIrc' _ = Data.Text.empty
 
-toIrc :: Command -> Text
-toIrc = (`append` "\r\n") . toIrc'
-
+-- | parse a line from IRC
 parseIrc :: Text -> Maybe Message
 parseIrc = maybeResult . parse message
 

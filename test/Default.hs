@@ -6,6 +6,7 @@ import Data.Text as T
 import Test.QuickCheck
 import Test.QuickCheck.Instances
 
+import Bot
 import IRC
 
 illegal :: String
@@ -83,3 +84,18 @@ instance Arbitrary Prefix where
 
 instance Arbitrary Message where
     arbitrary = Message <$> arbitrary <*> arbitrary
+
+arbitraryPing :: Gen Message
+arbitraryPing = Message <$>
+    (Just <$> (ServerPrefix <$> arbitrary)) <*> (Ping <$> arbitrary)
+
+instance Arbitrary CommandProxy where
+    arbitrary = oneof
+        [ SimpleProxy <$> arbitrary
+        , ScriptProxy <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+        , return IgnoreProxy
+        ]
+
+arbitraryScriptProxy :: Gen CommandProxy
+arbitraryScriptProxy =
+    ScriptProxy <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary

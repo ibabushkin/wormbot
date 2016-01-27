@@ -17,7 +17,7 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     Main, Defaults, IRC
+  exposed-modules:     Bot, Defaults, IRC
   hs-source-dirs:      src
   build-depends:       attoparsec >= 0.13,
                        base >=4.8,
@@ -32,7 +32,7 @@ library
 executable wormbot
   main-is:             Main.hs
   hs-source-dirs:      src
-  other-modules:       Defaults, IRC
+  other-modules:       Bot, Defaults, IRC
   build-depends:       attoparsec >= 0.13,
                        base >=4.8,
                        bytestring,
@@ -51,6 +51,7 @@ test-suite spec
   other-modules:       Default, IRCSpec
   build-depends:       attoparsec >= 0.13,
                        base,
+                       process >=1.2,
                        text >= 1.2.2,
                        wormbot,
                        hspec,

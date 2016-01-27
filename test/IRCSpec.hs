@@ -13,8 +13,7 @@ import Default
 
 -- | main spec
 spec :: Spec
-spec = describe "IRC" $ do
-    toIrcSpec
+spec = describe "IRC" $ toIrcSpec
 
 -- = specs
 

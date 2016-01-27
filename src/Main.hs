@@ -1,13 +1,14 @@
 {-# LANGUAGE OverloadedStrings, ViewPatterns #-}
 module Main where
 
--- TODO: fix imports so we don't need to put Prelude. before stuff
 import Control.Concurrent (threadDelay)
 import Control.Monad (forever, filterM)
 
 import qualified Data.ByteString as B
-import qualified Data.List as L (uncons)
-import Data.Text hiding (foldr1)
+import Data.List (isPrefixOf, uncons)
+import Data.Monoid ((<>))
+import qualified Data.Text as T
+import Data.Text (Text)
 import Data.Text.Encoding
 
 import Network
@@ -18,7 +19,6 @@ import System.IO.Error
 import System.Process
 
 import Defaults
-import Hooks
 import IRC
 
 -- | a proxy type to represent intermediate results of a hook result
@@ -40,8 +40,8 @@ proxify _ = IgnoreProxy
 
 -- | proxify privmsg's
 proxifyMsg :: Prefix -> Channel -> Text -> CommandProxy
-proxifyMsg (UserPrefix nick _) channel (uncons -> Just (':', t)) =
-    case splitOn " " t of
+proxifyMsg (UserPrefix nick _) channel (T.uncons -> Just (':', t)) =
+    case T.splitOn " " t of
       cmd:args -> ScriptProxy channel nick cmd args
       _ -> IgnoreProxy
 proxifyMsg _ _ _ = IgnoreProxy
@@ -54,12 +54,15 @@ disconnectHandler e | isEOFError e = threadDelay 3000000 >> main
 -- | main: connecting (UnrealIRCd compliant) and listen loop
 main :: IO ()
 main = (flip catchIOError) disconnectHandler $ do
+    dir <- doesDirectoryExist "scripts/"
+    createDirectoryIfMissing dir "scripts/"
+    setCurrentDirectory "scripts/"
     h <- connectTo server (PortNumber (fromIntegral port))
     hSetBuffering h NoBuffering
     send h $ Nick (NickName nick)
     send h $ User (UserName nick) (RealName "bot wormbot of some kind")
     initConnection h
-    send h $ PrivMsg (Channel "NickServ") ("IDENTIFY " `append` password)
+    send h $ PrivMsg (Channel "NickServ") ("IDENTIFY " `T.append` password)
     mapM_ (send h . Join . Channel) chans
     forever $ process h
 
@@ -87,19 +90,49 @@ process h = do
 -- | process proxy objects
 interpret :: CommandProxy -> IO (Maybe Command)
 interpret (SimpleProxy cmd) = return $ Just cmd
-interpret (ScriptProxy channel nick cmd args) = return Nothing -- TODO do
+interpret proxy@(ScriptProxy channel _ cmd _)
+    | T.length cmd /= 1 = do
+        run <- (createProc proxy . getLoaded) <$> getScripts
+        case run of
+          Just process -> do
+              result <- (T.filter nonNewline . T.pack) <$>
+                  catchIOError (readCreateProcess process "") handler
+              return . Just . PrivMsg channel $ result
+          Nothing -> return Nothing
+    | otherwise = return Nothing
+    where handler _ = return "Script crashed, inform an admin!"
+          nonNewline = (`notElem` ("\r\n" :: String))
 interpret IgnoreProxy = return Nothing
 
 -- get all avalable scripts
 getScripts :: IO [(FilePath, Bool)]
-getScripts = do files <- getDirectoryContents "." >>= filterM doesFileExist
-                perms <- mapM getPermissions files
-                return $ Prelude.zip files (Prelude.map executable perms)
+getScripts = do
+    files <- getDirectoryContents "." >>= filterM doesFileExist
+    perms <- mapM getPermissions files
+    return $ Prelude.zip files (Prelude.map executable perms)
 
-createProc :: CommandProxy -> [FilePath] -> CreateProcess
-createProc = undefined
+-- | get all scripts from a list that are executable (ie. "loaded" to the bot)
+getLoaded :: [(FilePath, Bool)] -> [FilePath]
+getLoaded = Prelude.foldr go []
+    where go (p, True) ps = p : ps
+          go _ ps = ps
 
--- wait for a ping, then answer it (required by UnrealIRCd)
+-- TODO: we kinda have redundant pattern matches here
+-- | create a CreateProcess struct we need to run a script based on
+-- a proxy and executable scripts
+createProc :: CommandProxy -> [FilePath] -> Maybe CreateProcess
+createProc (ScriptProxy
+               (T.unpack . getChannel -> channel)
+               (T.unpack . getNickName -> nick)
+               (T.unpack -> cmd)
+               (map T.unpack -> args)
+           ) scripts = addVars <$> (
+               proc <$> (("./" ++) <$> match) <*> pure args)
+    where match = fst <$> (uncons $ filter (cmd `isPrefixOf`) args)
+          addVars p = p { env = (Just [("NICKNAME", nick)]) <> (env p) }
+createProc _ _ = Nothing
+
+-- | wait for a ping, then answer it (required by UnrealIRCd)
 initConnection :: Handle -> IO ()
 initConnection h = do
     str <- decodeUtf8 <$> B.hGetLine h

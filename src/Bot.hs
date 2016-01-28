@@ -41,10 +41,15 @@ proxify _ = IgnoreProxy
 
 -- | proxify privmsg's
 proxifyMsg :: Prefix -> Channel -> Text -> CommandProxy
-proxifyMsg (UserPrefix nick _) channel (T.uncons -> Just (':', t)) =
-    case T.splitOn " " t of
-      cmd:args -> ScriptProxy channel nick cmd args
-      _ -> IgnoreProxy
+proxifyMsg (UserPrefix nickName _) channel (T.uncons -> Just (prefix, t))
+    | prefix `elem` prefixes =
+        case T.splitOn " " t of
+          cmd:args -> ScriptProxy targetChannel nickName cmd args
+          _ -> IgnoreProxy
+    | otherwise = IgnoreProxy
+    where targetChannel
+            | nick == getChannel channel = Channel $ getNickName nickName
+            | otherwise = channel
 proxifyMsg _ _ _ = IgnoreProxy
 
 -- | handle IOErrors caused by disconnects
@@ -84,26 +89,26 @@ process h = do
           print msg
           res <- interpret (proxify msg)
           case res of
-            Just r -> send h r
-            Nothing -> return ()
+            [] ->  return ()
+            rs -> mapM_ (send h) rs
       Nothing -> return ()
 
 -- | process proxy objects
-interpret :: CommandProxy -> IO (Maybe Command)
-interpret (SimpleProxy cmd) = return $ Just cmd
+interpret :: CommandProxy -> IO [Command]
+interpret (SimpleProxy cmd) = return [cmd]
 interpret proxy@(ScriptProxy channel _ cmd _)
     | T.length cmd /= 1 = do
         run <- (createProc proxy . getLoaded) <$> getScripts
         case run of
           Just process -> do
-              result <- (T.filter nonNewline . T.pack) <$>
+              result <- (formatText . T.pack) <$>
                   catchIOError (readCreateProcess process "") handler
-              return . Just . PrivMsg channel $ result
-          Nothing -> return Nothing
-    | otherwise = return Nothing
+              return . map (PrivMsg channel) $ result
+          Nothing -> return []
+    | otherwise = return []
     where handler _ = return "Script crashed, inform an admin!"
           nonNewline = (`notElem` ("\r\n" :: String))
-interpret IgnoreProxy = return Nothing
+interpret IgnoreProxy = return []
 
 -- get all avalable scripts
 getScripts :: IO [(FilePath, Bool)]
@@ -129,7 +134,7 @@ createProc (ScriptProxy
                (map T.unpack -> args)
            ) scripts = addVars <$> (
                proc <$> (("./" ++) <$> match) <*> pure args)
-    where match = fst <$> (uncons $ filter (cmd `isPrefixOf`) args)
+    where match = fst <$> (uncons $ filter (cmd `isPrefixOf`) scripts)
           addVars p = p { env = (Just [("NICKNAME", nick)]) <> (env p) }
 createProc _ _ = Nothing
 
@@ -141,3 +146,6 @@ initConnection h = do
       Just (Message _ (Ping token)) -> send h $ Pong token
       Just msg -> print msg >> initConnection h
       Nothing -> initConnection h
+
+formatText :: Text -> [Text]
+formatText = T.lines . T.filter (/='\r')

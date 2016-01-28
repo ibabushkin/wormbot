@@ -20,6 +20,7 @@ spec = do
     proxifyMsgSpec
     getLoadedSpec
     createProcSpec
+    formatTextSpec
 
 proxifySpec :: Spec
 proxifySpec = describe "proxify" $ do
@@ -55,3 +56,7 @@ createProcSpec = describe "createProc" $ do
                     Just (RawCommand _ _) -> True
                     Nothing -> True
                     _ -> False
+formatTextSpec :: Spec
+formatTextSpec = describe "formatText" $ do
+    it "contains no dangerous whitespace" $ property $
+        \str -> all (== T.empty) . map (T.filter (=='\r')) $ formatText str

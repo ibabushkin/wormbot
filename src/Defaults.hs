@@ -13,7 +13,7 @@ port = 6667
 
 -- nick to use
 nick :: Text
-nick = "worm"
+nick = "wormbot"
 
 -- nickserv password to use
 password :: Text
@@ -22,3 +22,6 @@ password = "wormsmakegreatpasswords"
 -- list of channels to join
 chans :: [Text]
 chans = ["#test"] --, "#Evilzone"]
+
+prefixes :: String
+prefixes = "<:"

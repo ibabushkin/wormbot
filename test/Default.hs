@@ -92,10 +92,11 @@ arbitraryPing = Message <$>
 instance Arbitrary CommandProxy where
     arbitrary = oneof
         [ SimpleProxy <$> arbitrary
-        , ScriptProxy <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+        , ScriptProxy <$> ((,,,) <$>
+            arbitrary <*> arbitrary <*> arbitrary <*> arbitrary)
         , return IgnoreProxy
         ]
 
-arbitraryScriptProxy :: Gen CommandProxy
-arbitraryScriptProxy =
-    ScriptProxy <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+arbitraryProcData :: Gen ProcData
+arbitraryProcData =
+    (,,,) <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary

@@ -36,7 +36,7 @@ proxifyMsgSpec = describe "proxifyMsg" $ do
     it "gives ScriptProxies and IgnoreProxies" $ property $
         \pr ch text -> case proxifyMsg pr ch text of
                          IgnoreProxy -> True
-                         ScriptProxy _ _ _ _ -> True
+                         ScriptProxy _ -> True
                          _ -> False
 
 getLoadedSpec :: Spec
@@ -51,8 +51,8 @@ getLoadedSpec = describe "getLoaded" $ do
 createProcSpec :: Spec
 createProcSpec = describe "createProc" $ do
     it "never returns shell commands" $ property $
-        forAll arbitraryScriptProxy $
-        \pr ps -> case cmdspec <$> createProc pr ps of
+        forAll arbitraryProcData $
+        \pd ps -> case cmdspec <$> createProc pd ps of
                     Just (RawCommand _ _) -> True
                     Nothing -> True
                     _ -> False

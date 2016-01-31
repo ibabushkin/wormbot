@@ -21,41 +21,20 @@ import System.Process
 import Defaults
 import IRC
 
--- | a proxy type to represent intermediate results of a hook result
-data CommandProxy
-    = SimpleProxy Command
-    | ScriptProxy Channel NickName Text [Text]
-    | IgnoreProxy
-    deriving (Show, Eq)
-
--- | pure mapping from input to intermediate structures
-proxify :: Message -> CommandProxy
-proxify (Message (Just src) cmd) =
-    case cmd of
-      Ping token -> SimpleProxy $ Pong token
-      Kick channel n _ | n == NickName nick -> SimpleProxy $ Join channel
-                       | otherwise -> IgnoreProxy
-      PrivMsg channel t -> proxifyMsg src channel t
-      _ -> IgnoreProxy
-proxify _ = IgnoreProxy
-
--- | proxify privmsg's
-proxifyMsg :: Prefix -> Channel -> Text -> CommandProxy
-proxifyMsg (UserPrefix nickName _) channel (T.uncons -> Just (prefix, t))
-    | prefix `elem` prefixes =
-        case T.splitOn " " t of
-          cmd:args -> ScriptProxy targetChannel nickName cmd args
-          _ -> IgnoreProxy
-    | otherwise = IgnoreProxy
-    where targetChannel
-            | nick == getChannel channel = Channel $ getNickName nickName
-            | otherwise = channel
-proxifyMsg _ _ _ = IgnoreProxy
-
+-- = IO actions
 -- | handle IOErrors caused by disconnects
 disconnectHandler :: IOError -> IO ()
 disconnectHandler e | isEOFError e = threadDelay 3000000 >> loop
                     | otherwise = ioError e
+
+-- | wait for a ping, then answer it (required by UnrealIRCd)
+initConnection :: Handle -> IO ()
+initConnection h = do
+    str <- decodeUtf8 <$> B.hGetLine h
+    case parseIrc str of
+      Just (Message _ (Ping token)) -> send h $ Pong token
+      Just msg -> print msg >> initConnection h
+      Nothing -> initConnection h
 
 -- | loop: connecting (UnrealIRCd compliant) and listen loop
 loop :: IO ()
@@ -93,12 +72,46 @@ process h = do
             rs -> mapM_ (send h) rs
       Nothing -> return ()
 
+-- = Proxy engine for pure message processing
+-- | a proxy type to represent intermediate processing states  of a hook result
+data CommandProxy
+    = SimpleProxy Command
+    | ScriptProxy ProcData
+    | IgnoreProxy
+    deriving (Show, Eq)
+
+type ProcData = (Channel, NickName, Text, [Text])
+
+-- | pure mapping from input to intermediate structures
+proxify :: Message -> CommandProxy
+proxify (Message (Just src) cmd) =
+    case cmd of
+      Ping token -> SimpleProxy $ Pong token
+      Kick channel n _ | n == NickName nick -> SimpleProxy $ Join channel
+                       | otherwise -> IgnoreProxy
+      PrivMsg channel t -> proxifyMsg src channel t
+      _ -> IgnoreProxy
+proxify _ = IgnoreProxy
+
+-- | proxify privmsg's
+proxifyMsg :: Prefix -> Channel -> Text -> CommandProxy
+proxifyMsg (UserPrefix nickName _) channel (T.uncons -> Just (prefix, t))
+    | prefix `elem` prefixes =
+        case T.splitOn " " t of
+          cmd:args -> ScriptProxy (targetChannel, nickName, cmd, args)
+          _ -> IgnoreProxy
+    | otherwise = IgnoreProxy
+    where targetChannel
+            | nick == getChannel channel = Channel $ getNickName nickName
+            | otherwise = channel
+proxifyMsg _ _ _ = IgnoreProxy
+
 -- | process proxy objects
 interpret :: CommandProxy -> IO [Command]
 interpret (SimpleProxy cmd) = return [cmd]
-interpret proxy@(ScriptProxy channel _ cmd _)
+interpret (ScriptProxy pData@(channel, _, cmd, _))
     | T.length cmd /= 1 = do
-        run <- (createProc proxy . getLoaded) <$> getScripts
+        run <- (createProc pData . getLoaded) <$> getScripts
         case run of
           Just process -> do
               result <- (formatText . T.pack) <$>
@@ -110,6 +123,7 @@ interpret proxy@(ScriptProxy channel _ cmd _)
           nonNewline = (`notElem` ("\r\n" :: String))
 interpret IgnoreProxy = return []
 
+-- = Helper functions and tools
 -- get all avalable scripts
 getScripts :: IO [(FilePath, Bool)]
 getScripts = do
@@ -123,29 +137,17 @@ getLoaded = foldr go []
     where go (p, True) ps = p : ps
           go _ ps = ps
 
--- TODO: we kinda have redundant pattern matches here
 -- | create a CreateProcess struct we need to run a script based on
 -- a proxy and executable scripts
-createProc :: CommandProxy -> [FilePath] -> Maybe CreateProcess
-createProc (ScriptProxy
-               (T.unpack . getChannel -> channel)
-               (T.unpack . getNickName -> nick)
-               (T.unpack -> cmd)
-               (map T.unpack -> args)
-           ) scripts = addVars <$> (
-               proc <$> (("./" ++) <$> match) <*> pure args)
+createProc :: ProcData -> [FilePath] -> Maybe CreateProcess
+createProc ( T.unpack . getChannel -> channel
+           , T.unpack . getNickName -> nick
+           , T.unpack -> cmd
+           , map T.unpack -> args
+           ) scripts =
+               addVars <$> (proc <$> (("./" ++) <$> match) <*> pure args)
     where match = fst <$> (uncons $ filter (cmd `isPrefixOf`) scripts)
           addVars p = p { env = (Just [("NICKNAME", nick)]) <> (env p) }
-createProc _ _ = Nothing
-
--- | wait for a ping, then answer it (required by UnrealIRCd)
-initConnection :: Handle -> IO ()
-initConnection h = do
-    str <- decodeUtf8 <$> B.hGetLine h
-    case parseIrc str of
-      Just (Message _ (Ping token)) -> send h $ Pong token
-      Just msg -> print msg >> initConnection h
-      Nothing -> initConnection h
 
 formatText :: Text -> [Text]
 formatText = T.lines . T.filter (/='\r')

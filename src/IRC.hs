@@ -48,6 +48,7 @@ data Message = Message (Maybe Prefix) Command deriving (Show, Eq)
 toIrc :: Command -> Text
 toIrc = (`append` "\r\n") . toIrc'
 
+-- TODO: kinda ugly, eh?
 toIrc' :: Command -> Text
 toIrc' (Pong token) = "PONG :" `append` getToken token
 toIrc' (Nick nick) = "NICK :" `append` getNickName nick 

@@ -95,33 +95,36 @@ proxify _ = IgnoreProxy
 
 -- | proxify privmsg's
 proxifyMsg :: Prefix -> Channel -> Text -> CommandProxy
-proxifyMsg (UserPrefix nickName _) channel (T.uncons -> Just (prefix, t))
-    | prefix `elem` prefixes =
-        case T.splitOn " " t of
-          cmd:args -> ScriptProxy (targetChannel, nickName, cmd, args)
-          _ -> IgnoreProxy
+proxifyMsg (UserPrefix nickName _) channel commandStr
+    | Just (prefix, input) <- T.uncons commandStr
+    , cmd:args <- T.splitOn " " input
+    , prefix `elem` prefixes
+    = ScriptProxy (targetChannel, nickName, cmd, args)
     | otherwise = IgnoreProxy
     where targetChannel
             | nick == getChannel channel = Channel $ getNickName nickName
             | otherwise = channel
 proxifyMsg _ _ _ = IgnoreProxy
 
+-- TODO: maybe split the logic
 -- | process proxy objects
 interpret :: CommandProxy -> IO [Command]
 interpret (SimpleProxy cmd) = return [cmd]
-interpret (ScriptProxy pData@(channel, _, cmd, _))
-    | T.length cmd /= 1 = do
-        run <- (createProc pData . getLoaded) <$> getScripts
-        case run of
-          Just process -> do
-              result <- (formatText . T.pack) <$>
-                  catchIOError (readCreateProcess process "") handler
-              return . map (PrivMsg channel) $ result
-          Nothing -> return []
+interpret (ScriptProxy pData@(_, _, cmd, _))
+    | T.length cmd /= 1 = runProc pData
     | otherwise = return []
-    where handler _ = return "Script crashed, inform an admin!"
-          nonNewline = (`notElem` ("\r\n" :: String))
 interpret IgnoreProxy = return []
+
+runProc :: ProcData -> IO [Command]
+runProc pData@(channel, _, _, _) = do
+    run <- (createProc pData . getLoaded) <$> getScripts
+    case run of
+      Just process -> do
+          result <- (formatText . T.pack) <$>
+              catchIOError (readCreateProcess process "") handler
+          return . map (PrivMsg channel) $ result
+      Nothing -> return [] 
+    where handler _ = return "Script crashed, inform an admin!"
 
 -- = Helper functions and tools
 -- get all avalable scripts

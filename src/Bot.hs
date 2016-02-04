@@ -24,7 +24,7 @@ import IRC
 -- = IO actions
 -- | handle IOErrors caused by disconnects
 disconnectHandler :: IOError -> IO ()
-disconnectHandler e | isEOFError e = threadDelay 3000000 >> loop
+disconnectHandler e | isEOFError e = threadDelay 3000000 >> initConnection >> loop
                     | otherwise = ioError e
 
 -- | wait for a ping, then answer it (required by UnrealIRCd)

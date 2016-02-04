@@ -152,8 +152,9 @@ createProc ( T.unpack . getChannel -> channel
            , T.unpack . getNickName -> nick
            , T.unpack -> cmd
            , map T.unpack -> args
-           ) scripts =
-               addVars <$> (proc <$> (("./" ++) <$> match) <*> pure args)
+           ) scripts
+    | cmd /= "" = addVars <$> (proc <$> (("./" ++) <$> match) <*> pure args)
+    | otherwise = Nothing
     where match = fst <$> (uncons $ filter (cmd `isPrefixOf`) scripts)
           addVars p = p { env = (Just [("NICKNAME", nick)]) <> (env p) }
 

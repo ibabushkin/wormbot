@@ -24,7 +24,7 @@ import IRC
 -- = IO actions
 -- | handle IOErrors caused by disconnects
 disconnectHandler :: IOError -> IO ()
-disconnectHandler e | isEOFError e = threadDelay 3000000 >> initConnection >> loop
+disconnectHandler e | isEOFError e = threadDelay 3000000 >> loop
                     | otherwise = ioError e
 
 -- | wait for a ping, then answer it (required by UnrealIRCd)
@@ -84,13 +84,11 @@ type ProcData = (Channel, NickName, Text, [Text])
 
 -- | pure mapping from input to intermediate structures
 proxify :: Message -> CommandProxy
-proxify (Message (Just src) cmd) =
-    case cmd of
-      Ping token -> SimpleProxy $ Pong token
-      Kick channel n _ | n == NickName nick -> SimpleProxy $ Join channel
-                       | otherwise -> IgnoreProxy
-      PrivMsg channel t -> proxifyMsg src channel t
-      _ -> IgnoreProxy
+proxify (Message _ (Ping token)) = SimpleProxy $ Pong token
+proxify (Message _ (Kick channel n _))
+    | n == NickName nick = SimpleProxy $ Join channel
+    | otherwise = IgnoreProxy
+proxify (Message (Just src) (PrivMsg channel t)) = proxifyMsg src channel t
 proxify _ = IgnoreProxy
 
 -- | proxify privmsg's

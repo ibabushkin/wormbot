@@ -106,14 +106,21 @@ proxifyMsg (UserPrefix nickName _) channel commandStr
             | otherwise = channel
 proxifyMsg _ _ _ = IgnoreProxy
 
--- TODO: maybe split the logic
 -- | process proxy objects
 interpret :: CommandProxy -> IO [Command]
 interpret (SimpleProxy cmd) = return [cmd]
-interpret (ScriptProxy pData@(_, _, cmd, _))
+interpret (ScriptProxy pData@(channel, _, cmd, _))
     | T.length cmd /= 1 = runProc pData
+    | Just ('c', _) <- T.uncons cmd = (:[]) <$> genHelp channel
     | otherwise = return []
 interpret IgnoreProxy = return []
+
+genHelp :: Channel -> IO Command
+genHelp channel =
+    (PrivMsg channel . T.intercalate ", " . map pretty) <$> getScripts
+    where permStr True = "[*] "
+          permStr False = "[ ] "
+          pretty (m, b) = permStr b `T.append` T.takeWhile (/='.') (T.pack m)
 
 runProc :: ProcData -> IO [Command]
 runProc pData@(channel, _, _, _) = do
@@ -134,7 +141,7 @@ getScripts = do
     perms <- mapM getPermissions files
     return $ zip files (map executable perms)
 
--- | get all scripts from a list that are executable (ie. "loaded" to the bot)
+-- | get all executable scripts from a list (ie. "loaded" to the bot)
 getLoaded :: [(FilePath, Bool)] -> [FilePath]
 getLoaded = foldr go []
     where go (p, True) ps = p : ps

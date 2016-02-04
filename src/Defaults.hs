@@ -21,7 +21,7 @@ password = "wormsmakegreatpasswords"
 
 -- list of channels to join
 chans :: [Text]
-chans = ["#test"] --, "#Evilzone"]
+chans = ["#test", "#Evilzone"]
 
 prefixes :: String
 prefixes = "<:"

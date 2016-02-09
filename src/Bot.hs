@@ -80,7 +80,7 @@ data CommandProxy
     | IgnoreProxy
     deriving (Show, Eq)
 
-type ProcData = (Channel, NickName, Text, [Text])
+type ProcData = (Channel, NickName, Char, Text, [Text])
 
 -- | pure mapping from input to intermediate structures
 proxify :: Message -> CommandProxy
@@ -97,7 +97,7 @@ proxifyMsg (UserPrefix nickName _) channel commandStr
     | Just (prefix, input) <- T.uncons commandStr
     , cmd:args <- T.splitOn " " input
     , prefix `elem` prefixes
-    = ScriptProxy (targetChannel, nickName, cmd, args)
+    = ScriptProxy (targetChannel, nickName, prefix, cmd, args)
     | otherwise = IgnoreProxy
     where targetChannel
             | nick == getChannel channel = Channel $ getNickName nickName
@@ -107,10 +107,10 @@ proxifyMsg _ _ _ = IgnoreProxy
 -- | process proxy objects
 interpret :: CommandProxy -> IO [Command]
 interpret (SimpleProxy cmd) = return [cmd]
-interpret (ScriptProxy pData@(channel, _, cmd, _))
-    | T.length cmd /= 1 = runProc pData
-    | Just ('c', _) <- T.uncons cmd = (:[]) <$> genHelp channel
-    | otherwise = return []
+interpret (ScriptProxy pData@(channel, _, _, cmd, _))
+    | Just ('c', rest) <- T.uncons cmd
+    , rest == T.empty = (:[]) <$> genHelp channel
+    | otherwise = runProc pData
 interpret IgnoreProxy = return []
 
 genHelp :: Channel -> IO Command
@@ -121,14 +121,15 @@ genHelp channel =
           pretty (m, b) = permStr b `T.append` T.takeWhile (/='.') (T.pack m)
 
 runProc :: ProcData -> IO [Command]
-runProc pData@(channel, _, _, _) = do
+runProc pData@(channel, _, _, _, _) = do
     run <- (createProc pData . getLoaded) <$> getScripts
     case run of
       Just process -> do
+          print pData
           result <- (formatText . T.pack) <$>
               catchIOError (readCreateProcess process "") handler
           return . map (PrivMsg channel) $ result
-      Nothing -> return [] 
+      Nothing -> return []
     where handler _ = return "Script crashed, inform an admin!"
 
 -- = Helper functions and tools
@@ -150,13 +151,19 @@ getLoaded = foldr go []
 createProc :: ProcData -> [FilePath] -> Maybe CreateProcess
 createProc ( T.unpack . getChannel -> channel
            , T.unpack . getNickName -> nick
-           , T.unpack -> cmd
+           , prefix , T.unpack -> cmd
            , map T.unpack -> args
-           ) scripts
-    | cmd /= "" = addVars <$> (proc <$> (("./" ++) <$> match) <*> pure args)
-    | otherwise = Nothing
-    where match = fst <$> (uncons $ filter (cmd `isPrefixOf`) scripts)
-          addVars p = p { env = (Just [("NICKNAME", nick)]) <> (env p) }
+           ) scripts =
+               addVars <$> (proc <$> (("./" ++) <$> match) <*> pure args)
+    where match = fst <$> (uncons $ filter (isValidPrefixOf cmd) scripts)
+          addVars p = p {
+              env = (Just [("NICKNAME", nick), ("PREFIX", [prefix])]) <>
+                  (env p) }
+
+isValidPrefixOf :: Eq a => [a] -> [a] -> Bool
+isValidPrefixOf [] _ = False
+isValidPrefixOf [c] cs = cs == [c]
+isValidPrefixOf cs ds = cs `isPrefixOf` ds
 
 formatText :: Text -> [Text]
 formatText = T.lines . T.filter (/='\r')

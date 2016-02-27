@@ -9,7 +9,7 @@ import Data.List (isPrefixOf, uncons)
 import Data.Monoid ((<>))
 import qualified Data.Text as T
 import Data.Text (Text)
-import Data.Text.Encoding
+import Data.Text.Encoding (decodeUtf8With, encodeUtf8)
 
 import Network
 
@@ -30,11 +30,12 @@ disconnectHandler e | isEOFError e = threadDelay 3000000 >> loop
 -- | wait for a ping, then answer it (required by UnrealIRCd)
 initConnection :: Handle -> IO ()
 initConnection h = do
-    str <- decodeUtf8 <$> B.hGetLine h
+    str <- decodeUtf8With decodingHandler <$> B.hGetLine h
     case parseIrc str of
       Just (Message _ (Ping token)) -> send h $ Pong token
       Just msg -> print msg >> initConnection h
       Nothing -> initConnection h
+    where decodingHandler _ _ = Nothing
 
 -- | loop: connecting (UnrealIRCd compliant) and listen loop
 loop :: IO ()
@@ -62,7 +63,7 @@ send h c = do
 -- Essentially, this is a hook engine
 process :: Handle -> IO ()
 process h = do
-    line <- decodeUtf8 <$> B.hGetLine h
+    line <- decodeUtf8With decodingHandler <$> B.hGetLine h
     case parseIrc line of
       Just msg -> do
           print msg
@@ -71,6 +72,7 @@ process h = do
             [] ->  return ()
             rs -> mapM_ (send h) rs
       Nothing -> return ()
+    where decodingHandler _ _ = Nothing
 
 -- = Proxy engine for pure message processing
 -- | a proxy type to represent intermediate processing states  of a hook result
